@@ -1,0 +1,21 @@
+@namespace epub "http://www.idpf.org/2007/ops";
+
+.commentTree {
+    margin-left: 0;
+    padding-left: 0;
+}
+
+.commentNode {
+    border-left: 2px solid darkgrey;
+    margin-left: 0;
+    padding-left: 12px;
+}
+
+blockquote {
+  background-color: #d3d3d3;
+}
+
+.author {
+  font-style: italic;
+  font-size: 0.8rem;
+}

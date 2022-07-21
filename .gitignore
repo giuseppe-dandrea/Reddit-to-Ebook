@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+.idea/
+
+credentials.py
+to_remember.py
+test.py
+
+db.sqlite3
+
+*.epub
