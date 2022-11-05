@@ -2,7 +2,7 @@ import sqlite3
 
 
 def get_connection():
-    _con = sqlite3.connect("../db.sqlite3")
+    _con = sqlite3.connect("db.sqlite3")
     _cur = _con.cursor()
     _cur.execute("""
         CREATE TABLE IF NOT EXISTS Ebooks (

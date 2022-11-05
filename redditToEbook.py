@@ -1,6 +1,9 @@
 import re
-import praw
+import time
 import os.path
+from datetime import datetime
+
+import praw
 from ebooklib import epub
 
 from libs import db_helper as db, print_progress_bar
@@ -71,10 +74,11 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, id
                     chapter.add_item(css)
                 html_title = f"<h1>{submission.title}</h1>"
                 html_author = f"<h3>{submission.author}</h3>"
+                html_date = f"<h3 class=\"date\">{time.strftime('%Y-%m-%d %H:%M', time.localtime(submission.created_utc))}</h3>"
                 html_flair = f"<h3 style=\"font-style: italic;\">{submission.link_flair_text}</h3>"
                 html_url = f"<a href=\"{submission.url}\">Link to post</a><br>"
                 html_old_url = f"<a href=\"{reddit_link_pattern.sub('https://old.reddit', submission.url)}\">Link to post (old.reddit)</a>"
-                chapter.content = html_author + html_title + html_flair + submission.selftext_html + html_url + html_old_url
+                chapter.content = html_author + html_date + html_title + html_flair + submission.selftext_html + html_url + html_old_url
                 comments_tree = get_comments_tree(submission.comments, top=top_comments)
                 add_comments_to_chapter(chapter, comments_tree)
                 book.add_item(chapter)
@@ -150,6 +154,8 @@ if __name__ == '__main__':
     book.set_language(LANGUAGE)
 
     book.add_author(AUTHOR)
+
+    book.add_metadata("DC", "date", datetime.now().replace(microsecond=0).isoformat())
 
     with open("style.css") as f:
         css = f.read()

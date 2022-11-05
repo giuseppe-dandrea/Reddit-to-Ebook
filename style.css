@@ -19,3 +19,11 @@ blockquote {
   font-style: italic;
   font-size: 0.8rem;
 }
+
+.date {
+    font-style: italic;
+    font-size: 0.8rem;
+    position: absolute;
+    right: 1rem;
+    top: 0.5rem;
+}

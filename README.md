@@ -17,7 +17,3 @@ User agent should be: `<platform>:<app ID>:<version string> (by /u/<reddit usern
 
 ## User options
 Ebook `identifier` is used to name the epub file and also to identify the ebook in the database. Use the same identifier when creating multiple versions from the same subreddit, otherwise posts could be duplicated.
-
-## TODOs
-- Add date to posts
-- Add date of creation to ebook metadata
