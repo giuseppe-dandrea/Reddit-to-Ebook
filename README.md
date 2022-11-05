@@ -17,3 +17,8 @@ User agent should be: `<platform>:<app ID>:<version string> (by /u/<reddit usern
 
 ## User options
 Ebook `identifier` is used to name the epub file and also to identify the ebook in the database. Use the same identifier when creating multiple versions from the same subreddit, otherwise posts could be duplicated.
+
+## Manually add links to ebook
+If you want to manually add some posts in the ebook you can add the id/url of the post in `links_to_add.txt`.
+
+The posts in this file will be processed before the top ones and added at the start of the ebook.

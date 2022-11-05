@@ -4,6 +4,7 @@ import os.path
 from datetime import datetime
 
 import praw
+import prawcore.exceptions
 from ebooklib import epub
 
 from libs import db_helper as db, print_progress_bar
@@ -29,6 +30,8 @@ OUTPUT_FOLDER = "out"
 
 # ------------------------------------------------------------------------------------#
 
+reddit_link_pattern = re.compile("https://www.reddit")
+
 
 # Use script credentials from https://www.reddit.com/prefs/apps
 #
@@ -43,8 +46,24 @@ def get_reddit_instance():
     return instance
 
 
-def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, identifier, version, time_filter="all",
-                  flair_filters=None, css=None, top_comments=3):
+def create_chapter_from_submission(submission, top_comments, css):
+    chapter = epub.EpubHtml(title=submission.title, file_name=f"{submission.fullname}.xhtml", lang="hr")
+    if css:
+        chapter.add_item(css)
+    html_title = f"<h1>{submission.title}</h1>"
+    html_author = f"<h3>{submission.author}</h3>"
+    html_date = f"<h3 class=\"date\">{time.strftime('%Y-%m-%d %H:%M', time.localtime(submission.created_utc))}</h3>"
+    html_flair = f"<h3 style=\"font-style: italic;\">{submission.link_flair_text}</h3>"
+    html_url = f"<a href=\"{submission.url}\">Link to post</a><br>"
+    html_old_url = f"<a href=\"{reddit_link_pattern.sub('https://old.reddit', submission.url)}\">Link to post (old.reddit)</a>"
+    chapter.content = html_author + html_date + html_title + html_flair + submission.selftext_html + html_url + html_old_url
+    comments_tree = get_comments_tree(submission.comments, top=top_comments)
+    add_comments_to_chapter(chapter, comments_tree)
+    return chapter
+
+
+def get_posts_as_book(reddit, subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, identifier, version, time_filter="all",
+                      flair_filters=None, css=None, top_comments=3):
     # flair filters must be a list
     if flair_filters and not isinstance(flair_filters, list):
         raise TypeError("flair_filters must be None or a list of strings")
@@ -55,45 +74,67 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, id
     posts_loaded_cumulative = db.post_loaded_cumulative(db_cursor, identifier) or 0
     posts_added_to_ebook = 0
     last_fullname = None
-    after = db.get_last_fullname(db_cursor, identifier)
 
-    reddit_link_pattern = re.compile("https://www.reddit")
+    # Check if there are some links to add
+    with open("links_to_add.txt") as links_file:
+        links = links_file.readlines()
+
+    print_progress_bar.printProgressBar(0, n_posts)
+    with open("links_to_add.txt", "w") as links_file:
+        for link in links:
+            link = link.strip()
+            if link[0] == "#":
+                links_file.write(f"{link}\n")
+                continue
+            if posts_added_to_ebook < n_posts:
+                try:
+                    if link.startswith("http"):
+                        submission = reddit.submission(url=link)
+                    else:
+                        submission = reddit.submission(id=link)
+                    chapter = create_chapter_from_submission(submission, top_comments, css)
+                    book.add_item(chapter)
+                    _chapters.append(chapter)
+                    _toc.append(epub.Link(f"{submission.fullname}.xhtml",
+                                          f"{submission.title} - {submission.author} - {submission.link_flair_text}",
+                                          submission.title))
+                    posts_added_to_ebook += 1
+                    print_progress_bar.printProgressBar(posts_added_to_ebook, n_posts)
+                    db.insert_read_post(db_cursor, submission.fullname, submission.title, submission.link_flair_text,
+                                        identifier, version)
+
+                except prawcore.exceptions.NotFound:
+                    print(f"\nInvalid link or submission id: {link}")
+            else:
+                links_file.write(f"{link}\n")
+
+    # Now scrape from where you left last time
+    after = db.get_last_fullname(db_cursor, identifier)
     if not after:
         submissions_listing = subreddit.top(limit=None, time_filter=time_filter)
     else:
         submissions_listing = subreddit.top(limit=None, time_filter=time_filter,
                                             params={"after": after, "count": posts_loaded_cumulative})
 
-    for i, submission in enumerate(submissions_listing):
-        last_fullname = submission.fullname
-        posts_loaded += 1
-        if not flair_filters or submission.link_flair_text and any(substr in submission.link_flair_text for substr in flair_filters):
-            if not db.post_in_read_posts(db_cursor, identifier, submission.fullname):
-                chapter = epub.EpubHtml(title=submission.title, file_name=f"{submission.fullname}.xhtml", lang="hr")
-                if css:
-                    chapter.add_item(css)
-                html_title = f"<h1>{submission.title}</h1>"
-                html_author = f"<h3>{submission.author}</h3>"
-                html_date = f"<h3 class=\"date\">{time.strftime('%Y-%m-%d %H:%M', time.localtime(submission.created_utc))}</h3>"
-                html_flair = f"<h3 style=\"font-style: italic;\">{submission.link_flair_text}</h3>"
-                html_url = f"<a href=\"{submission.url}\">Link to post</a><br>"
-                html_old_url = f"<a href=\"{reddit_link_pattern.sub('https://old.reddit', submission.url)}\">Link to post (old.reddit)</a>"
-                chapter.content = html_author + html_date + html_title + html_flair + submission.selftext_html + html_url + html_old_url
-                comments_tree = get_comments_tree(submission.comments, top=top_comments)
-                add_comments_to_chapter(chapter, comments_tree)
-                book.add_item(chapter)
-                _chapters.append(chapter)
-                _toc.append(epub.Link(f"{submission.fullname}.xhtml",
-                                      f"{submission.title} - {submission.author} - {submission.link_flair_text}",
-                                      submission.title))
-                posts_added_to_ebook += 1
-                print_progress_bar.printProgressBar(posts_added_to_ebook, N_POSTS)
-                db.insert_read_post(db_cursor, submission.fullname, submission.title, submission.link_flair_text,
-                                    identifier, version)
-                if n_posts and posts_added_to_ebook >= n_posts:
-                    db.insert_ebook(db_cursor, identifier, version, last_fullname, posts_loaded, posts_added_to_ebook)
-                    print(f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
-                    return _chapters, _toc
+    if posts_added_to_ebook < n_posts:
+        for i, submission in enumerate(submissions_listing):
+            last_fullname = submission.fullname
+            posts_loaded += 1
+            if not flair_filters or submission.link_flair_text and any(substr in submission.link_flair_text for substr in flair_filters):
+                if not db.post_in_read_posts(db_cursor, identifier, submission.fullname):
+                    chapter = create_chapter_from_submission(submission, top_comments, css)
+
+                    book.add_item(chapter)
+                    _chapters.append(chapter)
+                    _toc.append(epub.Link(f"{submission.fullname}.xhtml",
+                                          f"{submission.title} - {submission.author} - {submission.link_flair_text}",
+                                          submission.title))
+                    posts_added_to_ebook += 1
+                    print_progress_bar.printProgressBar(posts_added_to_ebook, n_posts)
+                    db.insert_read_post(db_cursor, submission.fullname, submission.title, submission.link_flair_text,
+                                        identifier, version)
+                    if posts_added_to_ebook >= n_posts:
+                        break
 
     db.insert_ebook(db_cursor, identifier, version, last_fullname, posts_loaded, posts_added_to_ebook)
     print(f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
@@ -162,10 +203,8 @@ if __name__ == '__main__':
     nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=css)
     book.add_item(nav_css)
 
-    print_progress_bar.printProgressBar(0, N_POSTS)
-
-    chapters, toc = get_top_posts(subreddit, book=book, css=nav_css, flair_filters=FLAIR_FILTERS, n_posts=N_POSTS,
-                                  db_cursor=db_cursor, identifier=IDENTIFIER, version=version)
+    chapters, toc = get_posts_as_book(reddit, subreddit, n_posts=N_POSTS, book=book, db_cursor=db_cursor,
+                                      identifier=IDENTIFIER, version=version, flair_filters=FLAIR_FILTERS, css=nav_css)
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 

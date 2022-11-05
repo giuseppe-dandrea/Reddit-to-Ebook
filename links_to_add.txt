@@ -1,0 +1,1 @@
+# Support both links and reddit base36 submission id e.g.,"2gmzqe".
