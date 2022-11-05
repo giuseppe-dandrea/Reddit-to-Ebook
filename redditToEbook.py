@@ -10,7 +10,7 @@ from credentials import CLIENT_ID, CLIENT_SECRET, USER_AGENT
 
 # Reddit options
 SUBREDDIT_NAME = "talesfromtechsupport"
-N_POSTS = 5
+N_POSTS = 50
 TIME_FILTER = "all"
 FLAIR_FILTERS = ["Long", "Epic"]
 N_TOP_LEVEL_COMMENTS = 3
