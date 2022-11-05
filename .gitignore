@@ -6,6 +6,8 @@ credentials.py
 to_remember.py
 test.py
 
+submission_example.md
+
 db.sqlite3
 
 *.epub

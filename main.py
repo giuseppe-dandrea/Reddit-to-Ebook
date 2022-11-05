@@ -62,7 +62,7 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, ve
     for i, submission in enumerate(submissions_listing):
         last_fullname = submission.fullname
         posts_loaded += 1
-        if not flair_filters or any(substr in submission.link_flair_text for substr in flair_filters):
+        if not flair_filters or submission.link_flair_text and any(substr in submission.link_flair_text for substr in flair_filters):
             if not db.post_in_read_posts(db_cursor, submission.fullname):
                 chapter = epub.EpubHtml(title=submission.title, file_name=f"{submission.fullname}.xhtml", lang="hr")
                 if css:
