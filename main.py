@@ -1,9 +1,10 @@
 import re
 import praw
-import db_helper as db
+import os.path
 from ebooklib import epub
 
 import print_progress_bar
+import db_helper as db
 from credentials import CLIENT_ID, CLIENT_SECRET, USER_AGENT
 
 # ----------------------------------- USER OPTIONS -----------------------------------#
@@ -21,6 +22,8 @@ IDENTIFIER = "tfts"
 TITLE = "Tales From Tech Support Vol. "
 AUTHOR = "Reddit Community"
 LANGUAGE = "en"
+
+OUTPUT_FOLDER = "out"
 
 # ------------------------------------------------------------------------------------#
 
@@ -167,7 +170,13 @@ if __name__ == '__main__':
     book.spine = ['nav', *chapters]
 
     filename = f"{IDENTIFIER}{version}.epub"
-    epub.write_epub(filename, book)
+    if OUTPUT_FOLDER:
+        if not os.path.exists(OUTPUT_FOLDER):
+            os.makedirs(OUTPUT_FOLDER)
+        epub.write_epub(f"{OUTPUT_FOLDER}/{filename}", book)
+    else:
+        epub.write_epub(filename, book)
+
     print(f"Done.\nFilename: {filename}")
     db_connection.commit()
     db_connection.close()
