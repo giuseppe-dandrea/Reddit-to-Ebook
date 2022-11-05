@@ -3,15 +3,14 @@ import praw
 import os.path
 from ebooklib import epub
 
-import print_progress_bar
-import db_helper as db
+from libs import db_helper as db, print_progress_bar
 from credentials import CLIENT_ID, CLIENT_SECRET, USER_AGENT
 
 # ----------------------------------- USER OPTIONS -----------------------------------#
 
 # Reddit options
 SUBREDDIT_NAME = "talesfromtechsupport"
-N_POSTS = 50
+N_POSTS = 5
 TIME_FILTER = "all"
 FLAIR_FILTERS = ["Long", "Epic"]
 N_TOP_LEVEL_COMMENTS = 3
@@ -41,7 +40,7 @@ def get_reddit_instance():
     return instance
 
 
-def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, version, time_filter="all",
+def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, identifier, version, time_filter="all",
                   flair_filters=None, css=None, top_comments=3):
     # flair filters must be a list
     if flair_filters and not isinstance(flair_filters, list):
@@ -50,10 +49,10 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, ve
     _chapters = []
     _toc = []
     posts_loaded = 0
-    posts_loaded_cumulative = db.post_loaded_cumulative(db_cursor) or 0
+    posts_loaded_cumulative = db.post_loaded_cumulative(db_cursor, identifier) or 0
     posts_added_to_ebook = 0
     last_fullname = None
-    after = db.get_last_fullname(db_cursor)
+    after = db.get_last_fullname(db_cursor, identifier)
 
     reddit_link_pattern = re.compile("https://www.reddit")
     if not after:
@@ -66,7 +65,7 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, ve
         last_fullname = submission.fullname
         posts_loaded += 1
         if not flair_filters or submission.link_flair_text and any(substr in submission.link_flair_text for substr in flair_filters):
-            if not db.post_in_read_posts(db_cursor, submission.fullname):
+            if not db.post_in_read_posts(db_cursor, identifier, submission.fullname):
                 chapter = epub.EpubHtml(title=submission.title, file_name=f"{submission.fullname}.xhtml", lang="hr")
                 if css:
                     chapter.add_item(css)
@@ -86,16 +85,14 @@ def get_top_posts(subreddit: praw.reddit.Subreddit, n_posts, book, db_cursor, ve
                 posts_added_to_ebook += 1
                 print_progress_bar.printProgressBar(posts_added_to_ebook, N_POSTS)
                 db.insert_read_post(db_cursor, submission.fullname, submission.title, submission.link_flair_text,
-                                    version)
+                                    identifier, version)
                 if n_posts and posts_added_to_ebook >= n_posts:
-                    db.insert_ebook(db_cursor, version, last_fullname, posts_loaded, posts_added_to_ebook)
-                    print(
-                        f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
+                    db.insert_ebook(db_cursor, identifier, version, last_fullname, posts_loaded, posts_added_to_ebook)
+                    print(f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
                     return _chapters, _toc
 
-    db.insert_ebook(db_cursor, version, last_fullname, posts_loaded, posts_added_to_ebook)
-    print(
-        f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
+    db.insert_ebook(db_cursor, identifier, version, last_fullname, posts_loaded, posts_added_to_ebook)
+    print(f"STATS: posts_loaded={posts_loaded} posts_loaded_cumulative={posts_loaded_cumulative + posts_loaded} last_fullname={last_fullname} posts_added_to_ebook={posts_added_to_ebook}")
     return _chapters, _toc
 
 
@@ -144,7 +141,7 @@ if __name__ == '__main__':
 
     db_connection = db.get_connection()
     db_cursor = db_connection.cursor()
-    last_version = db.get_last_version(db_cursor)
+    last_version = db.get_last_version(db_cursor, IDENTIFIER)
     version = (last_version or 0) + 1
 
     book = epub.EpubBook()
@@ -162,7 +159,7 @@ if __name__ == '__main__':
     print_progress_bar.printProgressBar(0, N_POSTS)
 
     chapters, toc = get_top_posts(subreddit, book=book, css=nav_css, flair_filters=FLAIR_FILTERS, n_posts=N_POSTS,
-                                  db_cursor=db_cursor, version=version)
+                                  db_cursor=db_cursor, identifier=IDENTIFIER, version=version)
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 
